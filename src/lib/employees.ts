@@ -1,8 +1,8 @@
 import "server-only";
 import { and, asc, count, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
-import { z } from "zod";
 import { getDb, schema } from "@/db";
 import type { EmployeeFilters } from "./employee-filters";
+import { isUuid } from "./ids";
 import type { ImportPlan, SavedEmployee } from "./import/plan";
 
 const { employees } = schema;
@@ -10,10 +10,6 @@ const { employees } = schema;
 export const EMPLOYEES_PAGE_SIZE = 25;
 
 const byName = [asc(sql`lower(${employees.name})`), asc(employees.id)];
-
-export function isEmployeeId(id: unknown): id is string {
-  return z.uuid().safeParse(id).success;
-}
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
@@ -59,7 +55,7 @@ export async function listAllEmployees() {
 }
 
 export async function getEmployee(id: string) {
-  if (!isEmployeeId(id)) return null;
+  if (!isUuid(id)) return null;
   const [row] = await getDb().select().from(employees).where(eq(employees.id, id)).limit(1);
   return row ?? null;
 }

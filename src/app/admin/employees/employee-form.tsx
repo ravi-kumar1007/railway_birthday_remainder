@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useLayoutEffect, useState, type ReactNode } from "react";
+import { useActionState, type ReactNode } from "react";
+import { FreshOnReturn } from "@/components/fresh-on-return";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/styles";
 import type { EmployeeField, EmployeeFormState, EmployeeFormValues } from "./actions";
 
@@ -14,11 +15,11 @@ type Props = {
 };
 
 export function EmployeeForm(props: Props) {
-  // Next.js keeps visited pages mounted but hidden (Activity). Remount the form whenever it is hidden,
-  // so coming back shows the saved values instead of a stale draft or error.
-  const [instance, setInstance] = useState(0);
-  useLayoutEffect(() => () => setInstance((n) => n + 1), []);
-  return <EmployeeFormFields key={instance} {...props} />;
+  return (
+    <FreshOnReturn>
+      <EmployeeFormFields {...props} />
+    </FreshOnReturn>
+  );
 }
 
 function EmployeeFormFields({ action, initial, submitLabel, maxDate }: Props) {

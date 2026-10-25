@@ -157,5 +157,6 @@ export const settings = pgTable("settings", {
 export type Employee = typeof employees.$inferSelect;
 export type NewEmployee = typeof employees.$inferInsert;
 export type Template = typeof templates.$inferSelect;
+export type NewTemplate = typeof templates.$inferInsert;
 export type SendLog = typeof sendLogs.$inferSelect;
 export type CronRun = typeof cronRuns.$inferSelect;

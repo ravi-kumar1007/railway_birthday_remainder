@@ -31,8 +31,16 @@ const authShape = {
   SESSION_SECRET: z.string().min(32, "must be at least 32 characters"),
 };
 
+const metaShape = {
+  META_GRAPH_VERSION: z.string("is not set").regex(/^v\d+\.\d+$/, "must look like v26.0"),
+  META_ACCESS_TOKEN: z.string("is not set").min(20, "must be a system user access token"),
+  META_WABA_ID: z.string("is not set").regex(/^\d+$/, "must be the numeric WhatsApp Business Account ID"),
+  META_PHONE_NUMBER_ID: z.string("is not set").regex(/^\d+$/, "must be the numeric phone number ID"),
+};
+
 let dbCache: z.infer<z.ZodObject<typeof dbShape>> | undefined;
 let authCache: z.infer<z.ZodObject<typeof authShape>> | undefined;
+let metaCache: z.infer<z.ZodObject<typeof metaShape>> | undefined;
 
 export function dbEnv() {
   dbCache ??= parseEnv(dbShape, "database");
@@ -42,4 +50,20 @@ export function dbEnv() {
 export function authEnv() {
   authCache ??= parseEnv(authShape, "auth");
   return authCache;
+}
+
+export function metaEnv() {
+  metaCache ??= parseEnv(metaShape, "Meta WhatsApp");
+  return metaCache;
+}
+
+/** Why the Meta settings can't be used, naming the variables but never their values; null when fine */
+export function metaConfigProblem(): string | null {
+  try {
+    metaEnv();
+    return null;
+  } catch (error) {
+    if (error instanceof EnvError) return error.message;
+    throw error;
+  }
 }

@@ -7,7 +7,7 @@ export const controlClass =
 export const inputClass = `mt-1.5 ${controlClass}`;
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium shadow-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60";
+  "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap shadow-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60";
 
 export const primaryButtonClass = `${buttonBase} bg-emerald-600 text-white hover:bg-emerald-700`;
 

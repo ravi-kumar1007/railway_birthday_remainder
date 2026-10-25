@@ -8,7 +8,8 @@ import { uniqueViolation } from "@/db/errors";
 import { requireAdmin } from "@/lib/auth/session";
 import { parseDateInput } from "@/lib/birthday";
 import { employeeInputSchema, type EmployeeInput } from "@/lib/employee-schema";
-import { findEmployeeWith, isEmployeeId } from "@/lib/employees";
+import { findEmployeeWith } from "@/lib/employees";
+import { isUuid } from "@/lib/ids";
 import { describeError } from "@/lib/log";
 
 const { employees } = schema;
@@ -113,7 +114,7 @@ export async function updateEmployee(
 ): Promise<EmployeeFormState> {
   await requireAdmin();
   const values = readForm(formData);
-  if (!isEmployeeId(id)) return { error: "This employee no longer exists.", values };
+  if (!isUuid(id)) return { error: "This employee no longer exists.", values };
   const result = validate(values);
   if (!result.ok) return { fieldErrors: result.fieldErrors, values };
 
@@ -135,7 +136,7 @@ export async function updateEmployee(
 /** Soft delete: inactive employees stay in the database but never get messages */
 export async function setEmployeeActive(id: string, active: boolean): Promise<void> {
   await requireAdmin();
-  if (!isEmployeeId(id) || typeof active !== "boolean") redirect("/admin/employees");
+  if (!isUuid(id) || typeof active !== "boolean") redirect("/admin/employees");
 
   await getDb().update(employees).set({ isActive: active }).where(eq(employees.id, id));
 
