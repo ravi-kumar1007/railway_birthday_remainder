@@ -19,12 +19,3 @@ export function PageHeader({
     </div>
   );
 }
-
-export function ComingSoon({ phase, children }: { phase: number; children: ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-      <p className="text-xs font-medium tracking-wide text-emerald-700 uppercase">Phase {phase}</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">{children}</p>
-    </div>
-  );
-}

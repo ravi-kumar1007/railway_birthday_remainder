@@ -130,6 +130,8 @@ export const cronRuns = pgTable(
     failedCount: integer("failed_count").notNull().default(0),
     skippedCount: integer("skipped_count").notNull().default(0),
     note: text("note"),
+    // cron (cron-job.org) or admin ("Run now"); only cron runs count for the missed-run warning
+    source: text("source").notNull().default("cron"),
   },
   (t) => [index("cron_runs_started_at_idx").on(t.startedAt)],
 );

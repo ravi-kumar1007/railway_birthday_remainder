@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { todayInTimeZone, toIsoDate } from "@/lib/dates";
+import { addDays, todayInTimeZone, toIsoDate } from "@/lib/dates";
 
 const IST = "Asia/Kolkata";
 
@@ -33,5 +33,13 @@ describe("todayInTimeZone (IST today)", () => {
 describe("toIsoDate", () => {
   it("zero-pads month and day", () => {
     expect(toIsoDate({ year: 2026, month: 3, day: 5 })).toBe("2026-03-05");
+  });
+});
+
+describe("addDays", () => {
+  it("moves across month, year and leap-day boundaries", () => {
+    expect(addDays({ year: 2026, month: 12, day: 31 }, 1)).toEqual({ year: 2027, month: 1, day: 1 });
+    expect(addDays({ year: 2028, month: 2, day: 28 }, 1)).toEqual({ year: 2028, month: 2, day: 29 });
+    expect(addDays({ year: 2027, month: 3, day: 1 }, -1)).toEqual({ year: 2027, month: 2, day: 28 });
   });
 });

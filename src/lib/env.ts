@@ -50,6 +50,19 @@ const cronShape = {
 
 let cronCache: z.infer<z.ZodObject<typeof cronShape>> | undefined;
 
+const webhookShape = {
+  META_APP_SECRET: z.string("is not set").min(16, "must be the app secret from App settings > Basic"),
+  META_WEBHOOK_VERIFY_TOKEN: z.string("is not set").min(8, "must be at least 8 characters"),
+};
+
+let webhookCache: z.infer<z.ZodObject<typeof webhookShape>> | undefined;
+
+/** Only the webhook needs these, so sending works before the webhook is set up */
+export function webhookEnv() {
+  webhookCache ??= parseEnv(webhookShape, "webhook");
+  return webhookCache;
+}
+
 export function cronEnv() {
   cronCache ??= parseEnv(cronShape, "cron");
   return cronCache;

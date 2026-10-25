@@ -1,10 +1,11 @@
 import "server-only";
-import { and, asc, eq, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, like, lt, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { birthdayMonthDaysOn } from "./birthday";
-import { MAX_ATTEMPTS, type BirthdayStore } from "./birthday-run";
+import { MAX_ATTEMPTS, UNKNOWN_OUTCOME, type BirthdayStore } from "./birthday-run";
 import type { CalendarDate } from "./dates";
-import { DEFAULT_NAME_FORMAT } from "./names";
+import { isUuid } from "./ids";
+import { parseNameFormat } from "./names";
 
 const { employees, sendLogs, templates, cronRuns, settings } = schema;
 
@@ -16,8 +17,8 @@ function birthdayOn(matches: { month: number; day: number }[]) {
 
 /** The birthday job's database side. Each claim is one atomic statement; see BirthdayStore.claim. */
 export const birthdayStore: BirthdayStore = {
-  async startRun(runDate) {
-    const [run] = await getDb().insert(cronRuns).values({ runDate }).returning({ id: cronRuns.id });
+  async startRun(runDate, source) {
+    const [run] = await getDb().insert(cronRuns).values({ runDate, source }).returning({ id: cronRuns.id });
     return run.id;
   },
 
@@ -63,7 +64,7 @@ export const birthdayStore: BirthdayStore = {
       .from(settings)
       .where(eq(settings.key, "name_format"))
       .limit(1);
-    return row?.value === "full" ? "full" : DEFAULT_NAME_FORMAT;
+    return parseNameFormat(row?.value);
   },
 
   async claim(employeeId, year, templateId) {
@@ -116,8 +117,46 @@ export const birthdayStore: BirthdayStore = {
   async markUnknown(logId, message) {
     await getDb()
       .update(sendLogs)
-      .set({ errorMessage: `Outcome unknown, not retried automatically: ${message}`.slice(0, MAX_ERROR_LENGTH) })
+      .set({ errorMessage: `${UNKNOWN_OUTCOME} ${message}`.slice(0, MAX_ERROR_LENGTH) })
       .where(eq(sendLogs.id, logId));
+  },
+
+  async getLogForRetry(logId) {
+    if (!isUuid(logId)) return null;
+    const [row] = await getDb()
+      .select({
+        status: sendLogs.status,
+        errorMessage: sendLogs.errorMessage,
+        employee: {
+          id: employees.id,
+          name: employees.name,
+          phone: employees.phone,
+          isActive: employees.isActive,
+          whatsappConsent: employees.whatsappConsent,
+        },
+      })
+      .from(sendLogs)
+      .innerJoin(employees, eq(employees.id, sendLogs.employeeId))
+      .where(eq(sendLogs.id, logId))
+      .limit(1);
+    return row ?? null;
+  },
+
+  async claimManualRetry(logId) {
+    const [row] = await getDb()
+      .update(sendLogs)
+      .set({ status: "queued", attempts: sql`${sendLogs.attempts} + 1`, errorCode: null, errorMessage: null })
+      .where(
+        and(
+          eq(sendLogs.id, logId),
+          or(
+            eq(sendLogs.status, "failed"),
+            and(eq(sendLogs.status, "queued"), like(sendLogs.errorMessage, `${UNKNOWN_OUTCOME}%`)),
+          ),
+        ),
+      )
+      .returning({ attempts: sendLogs.attempts });
+    return row?.attempts ?? null;
   },
 };
 

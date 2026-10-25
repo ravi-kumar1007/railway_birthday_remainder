@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nameForMessage } from "@/lib/names";
+import { nameForMessage, parseNameFormat } from "@/lib/names";
 
 describe("nameForMessage", () => {
   it("uses the first name by default", () => {
@@ -15,5 +15,14 @@ describe("nameForMessage", () => {
 
   it("uses the whole name when asked", () => {
     expect(nameForMessage("  Priya   Sharma ", "full")).toBe("Priya Sharma");
+  });
+});
+
+describe("parseNameFormat", () => {
+  it("reads the saved setting, defaulting to first names", () => {
+    expect(parseNameFormat("full")).toBe("full");
+    expect(parseNameFormat("first")).toBe("first");
+    expect(parseNameFormat(undefined)).toBe("first");
+    expect(parseNameFormat("nickname")).toBe("first");
   });
 });

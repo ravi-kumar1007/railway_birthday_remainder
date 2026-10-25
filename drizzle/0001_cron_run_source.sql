@@ -1,0 +1,1 @@
+ALTER TABLE "cron_runs" ADD COLUMN "source" text DEFAULT 'cron' NOT NULL;

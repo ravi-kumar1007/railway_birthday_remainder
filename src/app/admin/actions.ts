@@ -17,7 +17,7 @@ export type RunNowResult = { ok: true; summary: RunSummary } | { ok: false; erro
 export async function runBirthdaysNow(): Promise<RunNowResult> {
   await requireAdmin();
   try {
-    const summary = await runBirthdayJob();
+    const summary = await runBirthdayJob("admin");
     revalidatePath("/admin", "layout");
     return { ok: true, summary };
   } catch (error) {

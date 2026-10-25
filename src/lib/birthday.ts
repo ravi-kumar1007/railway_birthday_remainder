@@ -1,4 +1,4 @@
-import { toIsoDate, type CalendarDate } from "./dates";
+import { addDays, toIsoDate, type CalendarDate } from "./dates";
 
 /** A birthday as stored on an employee. The year is optional. */
 export type Birthday = { day: number; month: number; year: number | null };
@@ -29,6 +29,19 @@ export function birthdayMonthDaysOn(date: CalendarDate): { month: number; day: n
 
 export function isBirthdayOn(birthday: Pick<Birthday, "day" | "month">, date: CalendarDate): boolean {
   return birthdayMonthDaysOn(date).some((match) => match.month === birthday.month && match.day === birthday.day);
+}
+
+/** Days from `today` to the next time this birthday is celebrated: 0 when it's today */
+export function daysUntilBirthday(birthday: Pick<Birthday, "day" | "month">, today: CalendarDate): number {
+  for (let days = 0; days < 366; days++) {
+    if (isBirthdayOn(birthday, addDays(today, days))) return days;
+  }
+  return 366;
+}
+
+/** Every birthday (day and month) celebrated in the `days` days after today */
+export function upcomingBirthdayMonthDays(today: CalendarDate, days: number): { month: number; day: number }[] {
+  return Array.from({ length: days }, (_, offset) => birthdayMonthDaysOn(addDays(today, offset + 1))).flat();
 }
 
 /** Parses the YYYY-MM-DD value of an <input type="date">. */

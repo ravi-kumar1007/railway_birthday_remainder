@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
-import { count } from "drizzle-orm";
+import Link from "next/link";
 import { connection } from "next/server";
-import { Suspense } from "react";
-import { Badge, type BadgeTone } from "@/components/badge";
+import { Suspense, type ReactNode } from "react";
+import { Badge } from "@/components/badge";
 import { PageHeader } from "@/components/page-header";
+import { SendStatusBadge } from "@/components/send-status-badge";
 import { Skeleton } from "@/components/skeleton";
-import { getDb, schema } from "@/db";
 import { rethrowNextErrors } from "@/db/errors";
-import { getSession } from "@/lib/auth/session";
-import { MAX_ATTEMPTS } from "@/lib/birthday-run";
+import { formatBirthday } from "@/lib/birthday";
+import { CRON_OVERDUE_HOURS, isCronOverdue, MAX_ATTEMPTS } from "@/lib/birthday-run";
 import { listTodaysBirthdays } from "@/lib/birthday-store";
-import { appTimeZone, todayInTimeZone, toIsoDate } from "@/lib/dates";
+import { getDashboardStats, UPCOMING_DAYS } from "@/lib/dashboard";
+import { appTimeZone, todayInTimeZone } from "@/lib/dates";
 import { describeError } from "@/lib/log";
 import { formatPhone } from "@/lib/phone";
 import { RunNowButton } from "./run-now-button";
@@ -21,34 +22,144 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default function DashboardPage() {
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        description="Today's birthdays and the daily WhatsApp job. Stats and run history arrive in Phase 6."
-      />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <PageHeader title="Dashboard" description="Today's birthdays, what's coming up, and how the daily WhatsApp job is doing." />
+      <Suspense fallback={<Skeleton className="h-28" />}>
+        <Overview />
+      </Suspense>
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Suspense fallback={<Skeleton className="h-64" />}>
           <TodaysBirthdays />
         </Suspense>
         <TestMessageForm />
       </div>
-      <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-40" />}>
-          <SetupStatus />
-        </Suspense>
-      </div>
     </>
   );
 }
 
-const SEND_STATUS: Record<NonNullable<SendStatus>, { label: string; tone: BadgeTone }> = {
-  queued: { label: "Sending", tone: "amber" },
-  sent: { label: "Sent", tone: "emerald" },
-  delivered: { label: "Delivered", tone: "emerald" },
-  read: { label: "Read", tone: "emerald" },
-  failed: { label: "Failed", tone: "red" },
-};
+async function Overview() {
+  // Today's date must be read per request
+  await connection();
+  const timeZone = appTimeZone();
+  const today = todayInTimeZone(timeZone);
 
-type SendStatus = Awaited<ReturnType<typeof listTodaysBirthdays>>[number]["status"];
+  let stats: Awaited<ReturnType<typeof getDashboardStats>>;
+  try {
+    stats = await getDashboardStats(today, timeZone);
+  } catch (error) {
+    rethrowNextErrors(error);
+    console.error("Loading dashboard stats failed:", describeError(error));
+    return (
+      <p role="alert" className="rounded-2xl border border-red-200 bg-white p-5 text-sm text-red-700 shadow-xs">
+        Could not load the dashboard. Check the database connection, or open{" "}
+        <Link href="/admin/settings" className="font-medium underline">
+          Settings
+        </Link>{" "}
+        for a health check.
+      </p>
+    );
+  }
+
+  const when = (date: Date) =>
+    new Intl.DateTimeFormat("en-IN", { timeZone, day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(date);
+  const { lastRun, lastCronRunAt } = stats;
+
+  return (
+    <div className="space-y-6">
+      {isCronOverdue(lastCronRunAt) && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <strong className="font-semibold">
+            {lastCronRunAt
+              ? `No scheduled run since ${when(lastCronRunAt)}, more than ${CRON_OVERDUE_HOURS} hours ago.`
+              : "The daily job has never run on schedule."}
+          </strong>{" "}
+          Check that cron-job.org is calling /api/cron/send-birthdays every day at 12:00 IST. Runs started with
+          &ldquo;Run now&rdquo; don&apos;t count.
+        </p>
+      )}
+
+      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Active employees" value={stats.activeEmployees} href="/admin/employees" />
+        <Stat label="Birthdays today" value={stats.birthdaysToday} />
+        <Stat label={`Next ${UPCOMING_DAYS} days`} value={stats.upcoming.length} />
+        <Stat
+          label="Failed this month"
+          value={stats.failedThisMonth}
+          href="/admin/logs?status=failed"
+          alert={stats.failedThisMonth > 0}
+        />
+      </dl>
+
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <Card title="Last run">
+          {lastRun ? (
+            <div className="px-5 py-4 text-sm">
+              <p className="font-medium">
+                {when(lastRun.startedAt)} · {lastRun.source === "admin" ? "Run now" : "scheduled"}
+              </p>
+              <p className="mt-1 text-slate-600">
+                {lastRun.finishedAt
+                  ? `${lastRun.birthdaysFound} birthdays · ${lastRun.sentCount} sent · ${lastRun.failedCount} failed · ${lastRun.skippedCount} skipped`
+                  : "Didn't finish: it may have run out of time or hit an error."}
+              </p>
+              {lastRun.note && <p className="mt-1 text-xs text-slate-500">{lastRun.note}</p>}
+            </div>
+          ) : (
+            <p className="px-5 py-6 text-sm text-slate-500">The job hasn&apos;t run yet.</p>
+          )}
+        </Card>
+
+        <Card title={`Coming up in the next ${UPCOMING_DAYS} days`}>
+          {stats.upcoming.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-slate-500">No birthdays in the next {UPCOMING_DAYS} days.</p>
+          ) : (
+            <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+              {stats.upcoming.map((employee) => (
+                <li key={employee.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+                  <span className="min-w-0 truncate">
+                    {employee.name}
+                    {!employee.whatsappConsent && <span className="ml-2 text-xs text-slate-400">no consent</span>}
+                  </span>
+                  <span className="shrink-0 text-xs text-slate-500">
+                    {formatBirthday({ day: employee.birthDay, month: employee.birthMonth, year: null })} ·{" "}
+                    {employee.inDays === 1 ? "tomorrow" : `in ${employee.inDays} days`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, href, alert }: { label: string; value: number; href?: string; alert?: boolean }) {
+  const content = (
+    <>
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className={`mt-1 text-2xl font-semibold tabular-nums ${alert ? "text-red-700" : "text-slate-900"}`}>
+        {value.toLocaleString("en-IN")}
+      </dd>
+    </>
+  );
+  const className = "block rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs";
+  return href ? (
+    <Link href={href} className={`${className} transition hover:border-slate-300`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
+function Card({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
+      <h2 className="border-b border-slate-200 px-5 py-3 text-sm font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 async function TodaysBirthdays() {
   // Today's date must be read per request
@@ -92,84 +203,26 @@ async function TodaysBirthdays() {
         <p className="px-5 py-10 text-center text-sm text-slate-500">No birthdays today.</p>
       ) : (
         <ul className="divide-y divide-slate-100">
-          {rows.map((row) => {
-            const unknown = row.status === "queued" && row.errorMessage?.startsWith("Outcome unknown");
-            const badge = !row.whatsappConsent
-              ? { label: "No consent", tone: "slate" as const }
-              : row.status === null
-                ? { label: "Waiting", tone: "slate" as const }
-                : unknown
-                  ? { label: "Unknown", tone: "amber" as const }
-                  : row.status === "failed"
-                    ? { label: `Failed (${row.attempts}/${MAX_ATTEMPTS})`, tone: "red" as const }
-                    : SEND_STATUS[row.status];
-            return (
-              <li key={row.id} className="flex items-start justify-between gap-3 px-5 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">🎂 {row.name}</p>
-                  <p className="text-xs text-slate-500">{formatPhone(row.phone)}</p>
-                  {row.errorMessage && row.status !== "sent" && (
-                    <p className="mt-1 text-xs text-red-700">{row.errorMessage}</p>
-                  )}
-                </div>
-                <Badge tone={badge.tone}>{badge.label}</Badge>
-              </li>
-            );
-          })}
+          {rows.map((row) => (
+            <li key={row.id} className="flex items-start justify-between gap-3 px-5 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">🎂 {row.name}</p>
+                <p className="text-xs text-slate-500">{formatPhone(row.phone)}</p>
+                {row.errorMessage && row.status !== "sent" && (
+                  <p className="mt-1 text-xs text-red-700">{row.errorMessage}</p>
+                )}
+              </div>
+              {!row.whatsappConsent ? (
+                <Badge tone="slate">No consent</Badge>
+              ) : row.status === null ? (
+                <Badge tone="slate">Waiting</Badge>
+              ) : (
+                <SendStatusBadge log={{ status: row.status, attempts: row.attempts ?? 0, errorMessage: row.errorMessage }} />
+              )}
+            </li>
+          ))}
         </ul>
       )}
     </section>
-  );
-}
-
-async function SetupStatus() {
-  const session = await getSession();
-  const timeZone = appTimeZone();
-  const today = toIsoDate(todayInTimeZone(timeZone));
-
-  let database: { ok: true; employees: number } | { ok: false; message: string };
-  try {
-    const [row] = await getDb().select({ value: count() }).from(schema.employees);
-    database = { ok: true, employees: row.value };
-  } catch (error) {
-    rethrowNextErrors(error);
-    // Drizzle's own message is just the SQL; the driver's message says what went wrong
-    const message = describeError(error);
-    database = {
-      ok: false,
-      message: /does not exist/.test(message)
-        ? "Connected, but tables are missing. Run npm run db:migrate."
-        : "Could not query the database. Check DATABASE_URL.",
-    };
-  }
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
-      <h2 className="border-b border-slate-200 px-5 py-3 text-sm font-semibold">Setup status</h2>
-      <dl className="divide-y divide-slate-100 text-sm">
-        <StatusRow label="Signed in as" value={session?.email ?? "—"} ok />
-        <StatusRow
-          label="Database"
-          value={database.ok ? `Connected · ${database.employees} employees` : database.message}
-          ok={database.ok}
-        />
-        <StatusRow label={`Today (${timeZone})`} value={today} ok />
-      </dl>
-    </section>
-  );
-}
-
-function StatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
-  return (
-    <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="flex items-center gap-2 font-medium">
-        <span
-          className={`size-2 shrink-0 rounded-full ${ok ? "bg-emerald-500" : "bg-red-500"}`}
-          aria-hidden
-        />
-        {value}
-      </dd>
-    </div>
   );
 }

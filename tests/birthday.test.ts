@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   birthdayMonthDaysOn,
+  daysUntilBirthday,
   formatBirthday,
   isBirthdayOn,
   isValidBirthday,
   parseDateInput,
   toDateInputValue,
+  upcomingBirthdayMonthDays,
 } from "@/lib/birthday";
 
 describe("isValidBirthday", () => {
@@ -94,5 +96,39 @@ describe("birthdayMonthDaysOn (Feb 29)", () => {
     ]);
     expect(birthdayMonthDaysOn({ year: 2028, month: 2, day: 28 })).toEqual([{ month: 2, day: 28 }]);
     expect(birthdayMonthDaysOn({ year: 2028, month: 2, day: 29 })).toEqual([{ month: 2, day: 29 }]);
+  });
+});
+
+describe("daysUntilBirthday", () => {
+  const today = { year: 2026, month: 12, day: 30 };
+
+  it("counts days to the next birthday, crossing the new year", () => {
+    expect(daysUntilBirthday({ day: 30, month: 12 }, today)).toBe(0);
+    expect(daysUntilBirthday({ day: 31, month: 12 }, today)).toBe(1);
+    expect(daysUntilBirthday({ day: 2, month: 1 }, today)).toBe(3);
+    expect(daysUntilBirthday({ day: 29, month: 12 }, today)).toBe(364);
+  });
+
+  it("counts 29 Feb birthdays to 28 Feb in non-leap years", () => {
+    expect(daysUntilBirthday({ day: 29, month: 2 }, { year: 2027, month: 2, day: 20 })).toBe(8);
+    expect(daysUntilBirthday({ day: 29, month: 2 }, { year: 2028, month: 2, day: 20 })).toBe(9);
+  });
+});
+
+describe("upcomingBirthdayMonthDays", () => {
+  it("lists the day and month of every birthday in the next N days, after today", () => {
+    expect(upcomingBirthdayMonthDays({ year: 2026, month: 12, day: 30 }, 3)).toEqual([
+      { month: 12, day: 31 },
+      { month: 1, day: 1 },
+      { month: 1, day: 2 },
+    ]);
+  });
+
+  it("includes 29 Feb when 28 Feb falls in a non-leap year", () => {
+    expect(upcomingBirthdayMonthDays({ year: 2027, month: 2, day: 27 }, 2)).toEqual([
+      { month: 2, day: 28 },
+      { month: 2, day: 29 },
+      { month: 3, day: 1 },
+    ]);
   });
 });

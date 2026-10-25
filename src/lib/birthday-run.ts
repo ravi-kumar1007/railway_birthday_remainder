@@ -15,11 +15,23 @@ export const START_BUDGET_MS = 8000;
 const SEND_TIMEOUT_MS = 5000;
 const HARD_LIMIT_MS = 9500;
 
+/** How send_logs.error_message starts on a send that got no answer from Meta */
+export const UNKNOWN_OUTCOME = "Outcome unknown, not retried automatically:";
+
+/** The dashboard warns when cron-job.org hasn't called for this long */
+export const CRON_OVERDUE_HOURS = 26;
+
+export function isCronOverdue(lastCronRunAt: Date | null, now: Date = new Date()): boolean {
+  return !lastCronRunAt || now.getTime() - lastCronRunAt.getTime() > CRON_OVERDUE_HOURS * 3_600_000;
+}
+
+export type RunSource = "cron" | "admin";
+
 /** A claimed send slot, or why there is none: already sent, being sent now, or out of attempts */
 export type Claim = { logId: string; attempt: number } | { skip: "sent" | "in_progress" | "gave_up" };
 
 export interface BirthdayStore {
-  startRun(runDate: string): Promise<string>;
+  startRun(runDate: string, source: RunSource): Promise<string>;
   finishRun(runId: string, summary: RunSummary): Promise<void>;
   findBirthdayEmployees(matches: { month: number; day: number }[]): Promise<{ id: string; name: string; phone: string }[]>;
   getActiveTemplate(): Promise<Pick<Template, "id" | "name" | "language" | "status" | "bodyText"> | null>;
@@ -35,6 +47,16 @@ export interface BirthdayStore {
   markFailed(logId: string, code: string, message: string): Promise<void>;
   /** Leaves the row queued, so it is never retried automatically */
   markUnknown(logId: string, message: string): Promise<void>;
+  getLogForRetry(logId: string): Promise<{
+    status: "queued" | "sent" | "delivered" | "read" | "failed";
+    errorMessage: string | null;
+    employee: { id: string; name: string; phone: string; isActive: boolean; whatsappConsent: boolean };
+  } | null>;
+  /**
+   * Atomically takes a failed send, or one with an unknown outcome, for a manual retry and returns
+   * its new attempt number; null if it isn't retryable or someone else just took it.
+   */
+  claimManualRetry(logId: string): Promise<number | null>;
 }
 
 export type SendFn = (
@@ -63,6 +85,7 @@ export async function runBirthdays({
   today = todayInTimeZone(),
   now = Date.now,
   unavailable = null,
+  source = "cron",
 }: {
   store: BirthdayStore;
   send: SendFn;
@@ -70,6 +93,7 @@ export async function runBirthdays({
   now?: () => number;
   /** Why sending is impossible right now (Meta not configured), if it is */
   unavailable?: string | null;
+  source?: RunSource;
 }): Promise<RunSummary> {
   const started = now();
   const summary: RunSummary = {
@@ -81,7 +105,7 @@ export async function runBirthdays({
     remaining: 0,
     note: null,
   };
-  const runId = await store.startRun(summary.runDate);
+  const runId = await store.startRun(summary.runDate, source);
 
   try {
     const employees = await store.findBirthdayEmployees(birthdayMonthDaysOn(today));
@@ -153,4 +177,57 @@ export async function runBirthdays({
   } finally {
     await store.finishRun(runId, summary);
   }
+}
+
+/**
+ * An admin's Retry on one send from the logs page: a failed one, or one whose outcome was unknown
+ * (the admin has checked it didn't arrive). The claim is atomic, so a double click sends once.
+ */
+export async function retryWish({
+  store,
+  send,
+  logId,
+  unavailable = null,
+}: {
+  store: BirthdayStore;
+  send: SendFn;
+  logId: string;
+  unavailable?: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const fail = (error: string) => ({ ok: false as const, error });
+  if (unavailable) return fail(`Meta isn't connected: ${unavailable}`);
+
+  const log = await store.getLogForRetry(logId);
+  if (!log) return fail("This send no longer exists.");
+  const unknown = log.status === "queued" && Boolean(log.errorMessage?.startsWith(UNKNOWN_OUTCOME));
+  if (log.status !== "failed" && !unknown) return fail("Only failed sends, or ones with an unknown outcome, can be retried.");
+  if (!log.employee.isActive) return fail(`${log.employee.name} is inactive.`);
+  if (!log.employee.whatsappConsent) return fail(`${log.employee.name} hasn't agreed to WhatsApp messages.`);
+
+  const template = await store.getActiveTemplate();
+  if (!template || !isUsableForBirthdays(template)) return fail("There's no active approved template to send.");
+  const nameFormat = await store.getNameFormat();
+
+  const attempt = await store.claimManualRetry(logId);
+  if (attempt === null) return fail("This send is already being retried.");
+
+  const outcome = await send(
+    {
+      to: log.employee.phone,
+      templateName: template.name,
+      language: template.language,
+      name: nameForMessage(log.employee.name, nameFormat),
+    },
+    SEND_TIMEOUT_MS,
+  );
+  if (outcome.ok) {
+    await store.markSent(logId, outcome.waMessageId);
+    return { ok: true };
+  }
+  if (outcome.definite) {
+    await store.markFailed(logId, outcome.code, outcome.message);
+    return fail(`Meta didn't send it: ${outcome.message}`);
+  }
+  await store.markUnknown(logId, outcome.message);
+  return fail(`No answer from Meta (${outcome.message}). Check the phone before retrying again.`);
 }

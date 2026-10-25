@@ -23,3 +23,9 @@ export function todayInTimeZone(timeZone: string = appTimeZone(), now: Date = ne
 export function toIsoDate({ year, month, day }: CalendarDate): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
+
+/** The calendar date `days` later (or earlier, if negative) */
+export function addDays({ year, month, day }: CalendarDate, days: number): CalendarDate {
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}

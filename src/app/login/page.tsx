@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { LoginForm } from "./login-form";
 
@@ -22,6 +23,11 @@ export default function LoginPage() {
             <LoginForm />
           </Suspense>
         </div>
+        <p className="mt-6 text-center text-xs text-slate-500">
+          <Link href="/privacy" className="hover:text-slate-700">
+            Privacy policy
+          </Link>
+        </p>
       </div>
     </main>
   );

@@ -25,7 +25,7 @@ async function sendBirthdays(request: Request): Promise<Response> {
   }
 
   try {
-    return Response.json(await runBirthdayJob());
+    return Response.json(await runBirthdayJob("cron"));
   } catch (error) {
     rethrowNextErrors(error);
     console.error("Birthday run failed:", describeError(error));

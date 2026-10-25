@@ -62,7 +62,7 @@ const REJECTION_REASONS: Record<string, string> = {
   INCORRECT_CATEGORY: "Wrong category",
 };
 
-function rejectionText(reason: string | undefined): string | null {
+export function rejectionText(reason: string | undefined): string | null {
   if (!reason || reason === "NONE") return null;
   return REJECTION_REASONS[reason] ?? reason.charAt(0) + reason.slice(1).toLowerCase().replaceAll("_", " ");
 }

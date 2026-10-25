@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CONCURRENCY,
+  isCronOverdue,
   MAX_ATTEMPTS,
+  retryWish,
   runBirthdays,
   START_BUDGET_MS,
   type BirthdayStore,
@@ -10,8 +12,16 @@ import {
   type SendFn,
 } from "@/lib/birthday-run";
 import type { NameFormat } from "@/lib/names";
+import { UNKNOWN_OUTCOME } from "@/lib/birthday-run";
 
-type Log = { id: string; status: "queued" | "sent" | "failed"; attempts: number; waMessageId?: string; error?: string };
+type Log = {
+  id: string;
+  employeeId: string;
+  status: "queued" | "sent" | "failed";
+  attempts: number;
+  waMessageId?: string;
+  error?: string;
+};
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 
@@ -21,7 +31,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
  */
 class MemoryStore implements BirthdayStore {
   logs = new Map<string, Log>();
-  runs: (RunSummary & { id: string; finished: boolean })[] = [];
+  runs: (RunSummary & { id: string; source: string; finished: boolean })[] = [];
+  inactive = new Set<string>();
+  noConsent = new Set<string>();
   queries: { month: number; day: number }[][] = [];
   template: { id: string; name: string; language: string; status: "APPROVED" | "PAUSED"; bodyText: string } | null = {
     id: "tpl",
@@ -34,9 +46,9 @@ class MemoryStore implements BirthdayStore {
 
   constructor(public employees: { id: string; name: string; phone: string }[]) {}
 
-  async startRun(runDate: string) {
+  async startRun(runDate: string, source: "cron" | "admin") {
     const id = `run${this.runs.length + 1}`;
-    this.runs.push({ id, runDate, birthdaysFound: 0, sent: 0, failed: 0, skipped: 0, remaining: 0, note: null, finished: false });
+    this.runs.push({ id, runDate, source, birthdaysFound: 0, sent: 0, failed: 0, skipped: 0, remaining: 0, note: null, finished: false });
     return id;
   }
   async finishRun(id: string, summary: RunSummary) {
@@ -57,7 +69,7 @@ class MemoryStore implements BirthdayStore {
     const key = `${employeeId}:${year}`;
     const log = this.logs.get(key);
     if (!log) {
-      this.logs.set(key, { id: key, status: "queued", attempts: 1 });
+      this.logs.set(key, { id: key, employeeId, status: "queued", attempts: 1 });
       return { logId: key, attempt: 1 };
     }
     if (log.status === "failed" && log.attempts < MAX_ATTEMPTS) {
@@ -77,7 +89,25 @@ class MemoryStore implements BirthdayStore {
     Object.assign(this.logs.get(logId)!, { status: "failed", error: `${code}: ${message}` });
   }
   async markUnknown(logId: string, message: string) {
-    Object.assign(this.logs.get(logId)!, { error: message });
+    Object.assign(this.logs.get(logId)!, { error: `${UNKNOWN_OUTCOME} ${message}` });
+  }
+  async getLogForRetry(logId: string) {
+    const log = this.logs.get(logId);
+    const employee = log && this.employees.find((e) => e.id === log.employeeId);
+    if (!log || !employee) return null;
+    return {
+      status: log.status,
+      errorMessage: log.error ?? null,
+      employee: { ...employee, isActive: !this.inactive.has(employee.id), whatsappConsent: !this.noConsent.has(employee.id) },
+    };
+  }
+  async claimManualRetry(logId: string) {
+    await tick();
+    const log = this.logs.get(logId);
+    const retryable = log && (log.status === "failed" || (log.status === "queued" && log.error?.startsWith(UNKNOWN_OUTCOME)));
+    if (!log || !retryable) return null;
+    Object.assign(log, { status: "queued", attempts: log.attempts + 1, error: undefined });
+    return log.attempts;
   }
 }
 
@@ -159,7 +189,7 @@ describe("runBirthdays", () => {
     expect(calls).toHaveLength(1);
     expect(first).toMatchObject({ failed: 1, note: expect.stringMatching(/1 .*unknown/i) });
     expect(second).toMatchObject({ skipped: 1 });
-    expect(store.logs.get("e1:2026")).toMatchObject({ status: "queued", error: "Meta didn't answer in time." });
+    expect(store.logs.get("e1:2026")).toMatchObject({ status: "queued", error: `${UNKNOWN_OUTCOME} Meta didn't answer in time.` });
   });
 
   it("sends nothing without an active approved template, and says why", async () => {
@@ -232,7 +262,65 @@ describe("runBirthdays", () => {
     const store = new MemoryStore([]);
     await runBirthdays({ store, send: recordingSender().send, today: TODAY });
     expect(store.runs).toEqual([
-      expect.objectContaining({ runDate: "2026-08-15", birthdaysFound: 0, finished: true, note: "No birthdays today." }),
+      expect.objectContaining({ runDate: "2026-08-15", source: "cron", birthdaysFound: 0, finished: true, note: "No birthdays today." }),
     ]);
+    await runBirthdays({ store, send: recordingSender().send, today: TODAY, source: "admin" });
+    expect(store.runs[1].source).toBe("admin");
+  });
+});
+
+describe("isCronOverdue", () => {
+  const now = new Date("2026-08-15T12:00:00Z");
+
+  it("warns when no scheduled run has happened in 26 hours", () => {
+    expect(isCronOverdue(null, now)).toBe(true);
+    expect(isCronOverdue(new Date("2026-08-14T09:59:00Z"), now)).toBe(true);
+    expect(isCronOverdue(new Date("2026-08-14T10:01:00Z"), now)).toBe(false);
+  });
+});
+
+describe("retryWish", () => {
+  async function failedOnce() {
+    const store = new MemoryStore(people(1));
+    await runBirthdays({ store, send: recordingSender({ ok: false, definite: true, code: "131026", message: "Undeliverable" }).send, today: TODAY });
+    return store;
+  }
+
+  it("resends a failed wish and records the result", async () => {
+    const store = await failedOnce();
+    const { calls, send } = recordingSender();
+    expect(await retryWish({ store, send, logId: "e1:2026" })).toEqual({ ok: true });
+    expect(calls).toEqual([{ to: "+919876543200", templateName: "birthday_wish", language: "en", name: "Person1" }]);
+    expect(store.logs.get("e1:2026")).toMatchObject({ status: "sent", attempts: 2 });
+  });
+
+  it("sends once when Retry is clicked twice at the same moment", async () => {
+    const store = await failedOnce();
+    const { calls, send } = recordingSender();
+    const results = await Promise.all([retryWish({ store, send, logId: "e1:2026" }), retryWish({ store, send, logId: "e1:2026" })]);
+    expect(calls).toHaveLength(1);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+  });
+
+  it("can retry a send whose outcome was unknown, when an admin chooses to", async () => {
+    const store = new MemoryStore(people(1));
+    await runBirthdays({ store, send: recordingSender({ ok: false, definite: false, message: "No answer" }).send, today: TODAY });
+    const { calls, send } = recordingSender();
+    expect(await retryWish({ store, send, logId: "e1:2026" })).toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses wishes already sent, inactive employees and withdrawn consent", async () => {
+    const sent = new MemoryStore(people(1));
+    await runBirthdays({ store: sent, send: recordingSender().send, today: TODAY });
+    expect(await retryWish({ store: sent, send: recordingSender().send, logId: "e1:2026" })).toMatchObject({ ok: false });
+
+    for (const flag of ["inactive", "noConsent"] as const) {
+      const store = await failedOnce();
+      store[flag].add("e1");
+      const { calls, send } = recordingSender();
+      expect(await retryWish({ store, send, logId: "e1:2026" })).toMatchObject({ ok: false });
+      expect(calls).toHaveLength(0);
+    }
   });
 });
