@@ -2,26 +2,33 @@ import { SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
 import { signSessionToken, verifySessionToken } from "@/lib/auth/jwt";
 import { getLockout, LOCKOUT_MS, lockoutMessage, type AttemptRow } from "@/lib/auth/lockout";
-import { getClientIp, safeNextPath } from "@/lib/auth/request";
+import { getClientIp, lockoutKey, safeNextPath } from "@/lib/auth/request";
 
 const SECRET = "x".repeat(40);
+const HASH = "$2b$12$" + "a".repeat(53);
 
 describe("session tokens", () => {
   it("round-trips the admin email", async () => {
-    const token = await signSessionToken("admin@example.com", SECRET);
-    await expect(verifySessionToken(token, SECRET)).resolves.toEqual({ email: "admin@example.com" });
+    const token = await signSessionToken("admin@example.com", SECRET, HASH);
+    await expect(verifySessionToken(token, SECRET, HASH)).resolves.toEqual({ email: "admin@example.com" });
+  });
+
+  it("signs every session out when the password changes", async () => {
+    const token = await signSessionToken("admin@example.com", SECRET, HASH);
+    await expect(verifySessionToken(token, SECRET, "$2b$12$" + "b".repeat(53))).resolves.toBeNull();
+    await expect(verifySessionToken(token, SECRET, undefined)).resolves.toBeNull();
   });
 
   it("rejects a token signed with another secret", async () => {
-    const token = await signSessionToken("admin@example.com", SECRET);
-    await expect(verifySessionToken(token, "y".repeat(40))).resolves.toBeNull();
+    const token = await signSessionToken("admin@example.com", SECRET, HASH);
+    await expect(verifySessionToken(token, "y".repeat(40), HASH)).resolves.toBeNull();
   });
 
   it("rejects tampered, missing and expired tokens", async () => {
-    const token = await signSessionToken("admin@example.com", SECRET);
-    await expect(verifySessionToken(token.slice(0, -2) + "xx", SECRET)).resolves.toBeNull();
-    await expect(verifySessionToken(undefined, SECRET)).resolves.toBeNull();
-    await expect(verifySessionToken(token, undefined)).resolves.toBeNull();
+    const token = await signSessionToken("admin@example.com", SECRET, HASH);
+    await expect(verifySessionToken(token.slice(0, -2) + "xx", SECRET, HASH)).resolves.toBeNull();
+    await expect(verifySessionToken(undefined, SECRET, HASH)).resolves.toBeNull();
+    await expect(verifySessionToken(token, undefined, HASH)).resolves.toBeNull();
 
     const expired = await new SignJWT({ role: "admin" })
       .setProtectedHeader({ alg: "HS256" })
@@ -30,7 +37,7 @@ describe("session tokens", () => {
       .setAudience("birthday-wishes-admin")
       .setExpirationTime(Math.floor(Date.now() / 1000) - 60)
       .sign(new TextEncoder().encode(SECRET));
-    await expect(verifySessionToken(expired, SECRET)).resolves.toBeNull();
+    await expect(verifySessionToken(expired, SECRET, HASH)).resolves.toBeNull();
   });
 
   it("rejects a valid signature without the admin role", async () => {
@@ -41,7 +48,7 @@ describe("session tokens", () => {
       .setAudience("birthday-wishes-admin")
       .setExpirationTime("1h")
       .sign(new TextEncoder().encode(SECRET));
-    await expect(verifySessionToken(token, SECRET)).resolves.toBeNull();
+    await expect(verifySessionToken(token, SECRET, HASH)).resolves.toBeNull();
   });
 });
 
@@ -83,15 +90,33 @@ describe("login lockout", () => {
 });
 
 describe("getClientIp", () => {
-  it("prefers the host-set client IP over X-Forwarded-For", () => {
-    const h = new Headers({ "x-forwarded-for": "6.6.6.6, 1.1.1.1", "x-nf-client-connection-ip": "2.2.2.2" });
-    expect(getClientIp(h)).toBe("2.2.2.2");
-    expect(getClientIp(new Headers({ "x-real-ip": "3.3.3.3", "x-forwarded-for": "6.6.6.6" }))).toBe("3.3.3.3");
+  const forged = { "x-forwarded-for": "6.6.6.6, 1.1.1.1" };
+
+  it("uses the header Netlify sets itself", () => {
+    expect(getClientIp(new Headers({ ...forged, "x-nf-client-connection-ip": "2.2.2.2", "x-real-ip": "7.7.7.7" }), false)).toBe("2.2.2.2");
+  });
+
+  it("uses x-real-ip on Vercel, ignoring a Netlify header a visitor could send there", () => {
+    expect(getClientIp(new Headers({ ...forged, "x-nf-client-connection-ip": "6.6.6.6", "x-real-ip": "3.3.3.3" }), true)).toBe("3.3.3.3");
   });
 
   it("falls back to the first X-Forwarded-For entry, then 'unknown'", () => {
-    expect(getClientIp(new Headers({ "x-forwarded-for": "4.4.4.4, 10.0.0.1" }))).toBe("4.4.4.4");
-    expect(getClientIp(new Headers())).toBe("unknown");
+    expect(getClientIp(new Headers({ "x-forwarded-for": "4.4.4.4, 10.0.0.1" }), false)).toBe("4.4.4.4");
+    expect(getClientIp(new Headers(), false)).toBe("unknown");
+  });
+});
+
+describe("lockoutKey", () => {
+  it("groups IPv6 addresses by their /64 network", () => {
+    expect(lockoutKey("2001:db8:1234:5678:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1234:5678::/64");
+    expect(lockoutKey("2001:0DB8:1234:5678::1")).toBe("2001:db8:1234:5678::/64");
+    expect(lockoutKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+  });
+
+  it("keeps IPv4 as it is, including IPv4 written as IPv6", () => {
+    expect(lockoutKey("1.2.3.4")).toBe("1.2.3.4");
+    expect(lockoutKey("::ffff:1.2.3.4")).toBe("1.2.3.4");
+    expect(lockoutKey("unknown")).toBe("unknown");
   });
 });
 

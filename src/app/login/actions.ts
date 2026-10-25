@@ -4,7 +4,12 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { checkLockout, recordLoginAttempt } from "@/lib/auth/login-attempts";
+import {
+  checkLockout,
+  discardLoginAttempt,
+  markLoginSucceeded,
+  startLoginAttempt,
+} from "@/lib/auth/login-attempts";
 import { lockoutMessage } from "@/lib/auth/lockout";
 import { getClientIp, safeNextPath } from "@/lib/auth/request";
 import { createSession, deleteSession } from "@/lib/auth/session";
@@ -33,15 +38,21 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     const env = authEnv();
     const ip = getClientIp(await headers());
 
-    const lock = await checkLockout(ip);
-    if (lock.locked) return { error: lockoutMessage(lock.until), email };
+    // Recorded as a failure before checking, so guesses sent in parallel count against each other
+    const attemptId = await startLoginAttempt(ip);
+    const lock = await checkLockout(ip, attemptId);
+    if (lock.locked) {
+      await discardLoginAttempt(attemptId);
+      return { error: lockoutMessage(lock.until), email };
+    }
 
     // Always run bcrypt so a wrong email takes as long as a wrong password
     const passwordOk = await bcrypt.compare(password, env.ADMIN_PASSWORD_HASH);
     const ok = passwordOk && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase();
-    await recordLoginAttempt(ip, ok);
 
-    if (!ok) {
+    if (ok) {
+      await markLoginSucceeded(attemptId);
+    } else {
       const after = await checkLockout(ip);
       return {
         error: after.locked ? lockoutMessage(after.until) : "Invalid email or password.",

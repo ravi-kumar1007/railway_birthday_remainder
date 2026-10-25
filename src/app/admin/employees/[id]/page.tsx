@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { dangerButtonClass, secondaryButtonClass } from "@/components/styles";
 import { SubmitButton } from "@/components/submit-button";
+import { requireAdmin } from "@/lib/auth/session";
 import { toDateInputValue } from "@/lib/birthday";
 import { todayInTimeZone, toIsoDate } from "@/lib/dates";
 import { getEmployee } from "@/lib/employees";
@@ -23,6 +24,8 @@ export default function EditEmployeePage({ params }: PageProps<"/admin/employees
 }
 
 async function EditEmployee({ params }: Pick<PageProps<"/admin/employees/[id]">, "params">) {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   const { id } = await params;
   // Today's date (the latest allowed birthday) must be read per request
   await connection();

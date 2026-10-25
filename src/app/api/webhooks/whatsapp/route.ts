@@ -40,6 +40,7 @@ export async function POST(request: Request) {
   // Not set up yet: refuse, and Meta keeps the events and retries later
   if (!appSecret) return new Response("Webhook not configured", { status: 503 });
 
+  if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) return new Response("Too large", { status: 413 });
   // The signature covers the exact bytes Meta sent, so check them before parsing
   const body = Buffer.from(await request.arrayBuffer());
   if (body.length > MAX_BODY_BYTES) return new Response("Too large", { status: 413 });

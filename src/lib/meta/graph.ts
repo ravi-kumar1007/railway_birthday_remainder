@@ -50,7 +50,9 @@ function errorFrom(status: number, body: GraphErrorBody | null): MetaApiError {
     message = "The Meta access token doesn't have permission. It needs whatsapp_business_management and whatsapp_business_messaging.";
   } else if (code === 4 || code === 80008 || code === 613) message = "Meta's rate limit was reached. Wait a few minutes and try again.";
   else message = error?.error_user_msg || error?.message || `Meta answered with status ${status}.`;
-  return new MetaApiError(message, status, "rejected", code, error?.error_subcode);
+  // A 5xx (or 408) can come after Meta already acted on the request, so its outcome is unknown
+  const outcome = status >= 500 || status === 408 ? "unknown" : "rejected";
+  return new MetaApiError(message, status, outcome, code, error?.error_subcode);
 }
 
 type GraphRequest = {

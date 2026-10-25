@@ -12,7 +12,8 @@ import {
 } from "./jwt";
 
 export async function createSession(email: string): Promise<void> {
-  const token = await signSessionToken(email, authEnv().SESSION_SECRET);
+  const env = authEnv();
+  const token = await signSessionToken(email, env.SESSION_SECRET, env.ADMIN_PASSWORD_HASH);
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     // Browsers reject Secure cookies on plain http, which `next dev` uses
@@ -33,7 +34,7 @@ export const getSession = cache(async (): Promise<SessionPayload | null> => {
   // so env validation never runs at build time
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const env = authEnv();
-  const session = await verifySessionToken(token, env.SESSION_SECRET);
+  const session = await verifySessionToken(token, env.SESSION_SECRET, env.ADMIN_PASSWORD_HASH);
   if (!session || session.email.toLowerCase() !== env.ADMIN_EMAIL.toLowerCase()) return null;
   return session;
 });

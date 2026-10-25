@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { primaryButtonClass } from "@/components/styles";
 import { rethrowNextErrors } from "@/db/errors";
+import { requireAdmin } from "@/lib/auth/session";
 import { metaConfigProblem } from "@/lib/env";
 import { describeError } from "@/lib/log";
 import { listTemplates } from "@/lib/template-store";
@@ -38,6 +39,8 @@ export default function TemplatesPage({ searchParams }: PageProps<"/admin/templa
 }
 
 async function Templates({ searchParams }: Pick<PageProps<"/admin/templates">, "searchParams">) {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   const { notice } = await searchParams;
   let templates: Awaited<ReturnType<typeof listTemplates>>;
   try {

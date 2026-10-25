@@ -18,7 +18,8 @@ function neutralizeFormula(value: string): string {
 
 function escapeCell(value: string): string {
   const safe = neutralizeFormula(value);
-  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+  // Semicolons and tabs separate columns in some spreadsheet locales, so they're quoted too
+  return /[",;\t\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
 /** RFC 4180 CSV with CRLF line endings */

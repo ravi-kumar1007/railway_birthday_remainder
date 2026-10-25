@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/styles";
 import { rethrowNextErrors } from "@/db/errors";
+import { requireAdmin } from "@/lib/auth/session";
 import { formatBirthday, isBirthdayOn } from "@/lib/birthday";
 import { todayInTimeZone } from "@/lib/dates";
 import {
@@ -60,6 +61,8 @@ export default function EmployeesPage({ searchParams }: PageProps<"/admin/employ
 }
 
 async function EmployeeList({ searchParams }: Pick<PageProps<"/admin/employees">, "searchParams">) {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   const params = await searchParams;
   const filters = parseEmployeeFilters(params);
   const notice = noticeFor(params.notice);

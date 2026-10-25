@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { STATUS_RANKS, type StatusUpdate, type TemplateUpdate } from "./webhook";
 
@@ -35,7 +35,14 @@ export async function applyWebhookUpdates({
           errorCode: update.status === "failed" ? update.errorCode : null,
           errorMessage: update.status === "failed" ? update.errorMessage : null,
         })
-        .where(and(eq(sendLogs.waMessageId, update.waMessageId), sql`${currentRank} < ${STATUS_RANKS[update.status]}`)),
+        .where(
+          and(
+            eq(sendLogs.waMessageId, update.waMessageId),
+            // A queued send is mid-attempt (or its outcome is unknown); only the sender changes it
+            ne(sendLogs.status, "queued"),
+            sql`${currentRank} < ${STATUS_RANKS[update.status]}`,
+          ),
+        ),
     ),
     ...templateUpdates.map((update) =>
       db

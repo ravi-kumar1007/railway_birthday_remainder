@@ -82,7 +82,8 @@ export const birthdayStore: BirthdayStore = {
     // Retry: only a failed row with attempts left, and only one run can flip it back to queued
     const [retry] = await db
       .update(sendLogs)
-      .set({ status: "queued", attempts: sql`${sendLogs.attempts} + 1`, templateId })
+      // The previous attempt's id goes, so a late webhook about it can't touch this attempt
+      .set({ status: "queued", attempts: sql`${sendLogs.attempts} + 1`, templateId, waMessageId: null })
       .where(and(thisYear, eq(sendLogs.status, "failed"), lt(sendLogs.attempts, MAX_ATTEMPTS)))
       .returning({ id: sendLogs.id, attempts: sendLogs.attempts });
     if (retry) return { logId: retry.id, attempt: retry.attempts };
@@ -145,7 +146,7 @@ export const birthdayStore: BirthdayStore = {
   async claimManualRetry(logId) {
     const [row] = await getDb()
       .update(sendLogs)
-      .set({ status: "queued", attempts: sql`${sendLogs.attempts} + 1`, errorCode: null, errorMessage: null })
+      .set({ status: "queued", attempts: sql`${sendLogs.attempts} + 1`, errorCode: null, errorMessage: null, waMessageId: null })
       .where(
         and(
           eq(sendLogs.id, logId),

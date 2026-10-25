@@ -49,6 +49,18 @@ describe("sendTemplateMessage", () => {
     });
   });
 
+  it("treats a server error from Meta as unknown, since Meta may have accepted the message first", async () => {
+    for (const status of [500, 502, 503, 504]) {
+      fetchMock.mockResolvedValueOnce(reply(status, { error: { code: 131000, message: "Something went wrong" } }));
+      expect(await sendTemplateMessage(message, 5000), String(status)).toMatchObject({ ok: false, definite: false });
+    }
+  });
+
+  it("treats a success with an unreadable body as unknown", async () => {
+    fetchMock.mockResolvedValue(new Response("not json", { status: 200 }));
+    expect(await sendTemplateMessage(message, 5000)).toMatchObject({ ok: false, definite: false });
+  });
+
   it("treats a request that never reached Meta as definitely not sent", async () => {
     fetchMock.mockRejectedValue(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }));
     expect(await sendTemplateMessage(message, 5000)).toMatchObject({ ok: false, definite: true });

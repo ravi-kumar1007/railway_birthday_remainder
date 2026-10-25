@@ -30,6 +30,9 @@ export async function POST(request: Request) {
     return reply({ error: "Send the rows as JSON." }, 415);
   }
 
+  if (Number(request.headers.get("content-length")) > MAX_BODY_CHARS) {
+    return reply({ error: "Too much data in one request." }, 413);
+  }
   const text = await request.text();
   if (text.length > MAX_BODY_CHARS) return reply({ error: "Too much data in one request." }, 413);
   let body: unknown;

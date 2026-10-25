@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/jwt";
 
-// Optimistic gate only. Pages, Server Actions and route handlers re-check the session themselves.
+// First gate only. Every component that loads admin data, every Server Action and every admin
+// route handler checks the session again itself (requireAdmin / getSession), so a gap here leaks nothing.
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const token = await verifySessionToken(
     request.cookies.get(SESSION_COOKIE)?.value,
     process.env.SESSION_SECRET,
+    process.env.ADMIN_PASSWORD_HASH,
   );
   // Same rule as getSession(), otherwise /login and /admin could redirect to each other forever
   const session =

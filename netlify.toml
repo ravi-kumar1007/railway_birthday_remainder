@@ -1,0 +1,10 @@
+# Netlify builds Next.js with its OpenNext adapter automatically: no plugin entry is needed.
+# Environment variables are set in the Netlify UI (Site configuration > Environment variables), never here.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Node 22 LTS: pdfjs-dist 6 requires 22.13 or newer
+  NODE_VERSION = "22"

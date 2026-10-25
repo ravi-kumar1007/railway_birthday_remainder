@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
+import { requireAdmin } from "@/lib/auth/session";
 import { todayInTimeZone, toIsoDate } from "@/lib/dates";
 import { addEmployee } from "../actions";
 import { EmployeeForm } from "../employee-form";
@@ -21,6 +22,8 @@ export default function NewEmployeePage() {
 }
 
 async function NewEmployeeForm() {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   // Today's date must be read per request, not frozen at build time
   await connection();
   return (

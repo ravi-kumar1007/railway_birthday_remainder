@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { SendStatusBadge } from "@/components/send-status-badge";
 import { Skeleton } from "@/components/skeleton";
 import { rethrowNextErrors } from "@/db/errors";
+import { requireAdmin } from "@/lib/auth/session";
 import { formatBirthday } from "@/lib/birthday";
 import { CRON_OVERDUE_HOURS, isCronOverdue, MAX_ATTEMPTS } from "@/lib/birthday-run";
 import { listTodaysBirthdays } from "@/lib/birthday-store";
@@ -37,6 +38,8 @@ export default function DashboardPage() {
 }
 
 async function Overview() {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   // Today's date must be read per request
   await connection();
   const timeZone = appTimeZone();
@@ -162,6 +165,8 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 }
 
 async function TodaysBirthdays() {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   // Today's date must be read per request
   await connection();
   const today = todayInTimeZone();

@@ -6,6 +6,7 @@ import { isUnknownOutcome, SendStatusBadge } from "@/components/send-status-badg
 import { Skeleton } from "@/components/skeleton";
 import { secondaryButtonClass } from "@/components/styles";
 import { rethrowNextErrors } from "@/db/errors";
+import { requireAdmin } from "@/lib/auth/session";
 import { appTimeZone } from "@/lib/dates";
 import { describeError } from "@/lib/log";
 import { logFiltersQuery, parseLogFilters } from "@/lib/log-filters";
@@ -32,6 +33,8 @@ export default function LogsPage({ searchParams }: PageProps<"/admin/logs">) {
 }
 
 async function Logs({ searchParams }: Pick<PageProps<"/admin/logs">, "searchParams">) {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   const filters = parseLogFilters(await searchParams);
   const timeZone = appTimeZone();
 

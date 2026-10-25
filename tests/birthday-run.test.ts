@@ -258,6 +258,21 @@ describe("runBirthdays", () => {
     expect(startedAt).toHaveLength(40);
   });
 
+  it("reports a worker's database error and carries on with the others", async () => {
+    const store = new MemoryStore(people(3));
+    const original = store.markSent.bind(store);
+    let failures = 0;
+    store.markSent = async (logId, waMessageId) => {
+      if (failures++ === 0) throw new Error("connection lost");
+      return original(logId, waMessageId);
+    };
+    const errors: unknown[] = [];
+    const summary = await runBirthdays({ store, send: recordingSender().send, today: TODAY, onError: (error) => errors.push(error) });
+    expect(errors).toEqual([new Error("connection lost")]);
+    expect(summary.sent).toBe(2);
+    expect(summary.note).toMatch(/database error/);
+  });
+
   it("records the run with its counts, even when nobody has a birthday", async () => {
     const store = new MemoryStore([]);
     await runBirthdays({ store, send: recordingSender().send, today: TODAY });

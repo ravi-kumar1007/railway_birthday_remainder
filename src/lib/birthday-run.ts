@@ -86,6 +86,7 @@ export async function runBirthdays({
   now = Date.now,
   unavailable = null,
   source = "cron",
+  onError,
 }: {
   store: BirthdayStore;
   send: SendFn;
@@ -94,6 +95,8 @@ export async function runBirthdays({
   /** Why sending is impossible right now (Meta not configured), if it is */
   unavailable?: string | null;
   source?: RunSource;
+  /** Gets each error that stopped a worker; the summary only says how many */
+  onError?: (error: unknown) => void;
 }): Promise<RunSummary> {
   const started = now();
   const summary: RunSummary = {
@@ -162,7 +165,9 @@ export async function runBirthdays({
     };
     // allSettled: one worker's database error must not end the run while the others are mid-send
     const results = await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
-    const crashed = results.filter((result) => result.status === "rejected").length;
+    const failures = results.filter((result) => result.status === "rejected");
+    for (const failure of failures) onError?.(failure.reason);
+    const crashed = failures.length;
 
     summary.remaining = queue.length;
     summary.note =

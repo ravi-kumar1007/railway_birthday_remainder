@@ -13,8 +13,12 @@ describe("toCsv", () => {
 
   it("neutralizes cells a spreadsheet would run as a formula", () => {
     expect(toCsv([["=HYPERLINK(\"x\")", "@SUM(A1)", "-2+3", "+cmd", "\t=1"]])).toBe(
-      "\"'=HYPERLINK(\"\"x\"\")\",'@SUM(A1),'-2+3,'+cmd,'\t=1\r\n",
+      "\"'=HYPERLINK(\"\"x\"\")\",'@SUM(A1),'-2+3,'+cmd,\"'\t=1\"\r\n",
     );
+  });
+
+  it("quotes semicolons and tabs, which some spreadsheet locales treat as separators", () => {
+    expect(toCsv([["x;=cmd|' /C calc'!A0", "a\tb"]])).toBe("\"x;=cmd|' /C calc'!A0\",\"a\tb\"\r\n");
   });
 
   it("leaves plain numbers, including +country-code phones, untouched", () => {

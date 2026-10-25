@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { RefreshButton } from "@/components/refresh-button";
 import { Skeleton } from "@/components/skeleton";
 import { rethrowNextErrors } from "@/db/errors";
+import { requireAdmin } from "@/lib/auth/session";
 import { runHealthChecks, type HealthCheck } from "@/lib/health";
 import { describeError } from "@/lib/log";
 import { getNameFormat } from "@/lib/settings-store";
@@ -41,6 +42,8 @@ const DOTS: Record<HealthCheck["state"], string> = {
 };
 
 async function HealthChecks() {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   await connection();
   const checks = await runHealthChecks();
   return (
@@ -66,6 +69,8 @@ async function HealthChecks() {
 }
 
 async function NameFormatSection() {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   let current: Awaited<ReturnType<typeof getNameFormat>>;
   try {
     current = await getNameFormat();
@@ -79,6 +84,8 @@ async function NameFormatSection() {
 
 /** The addresses to paste into Meta and cron-job.org, based on where the app is running */
 async function SetupAddresses() {
+  // Checked here too, not only by the proxy: this component loads admin data
+  await requireAdmin();
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "your-site";
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");

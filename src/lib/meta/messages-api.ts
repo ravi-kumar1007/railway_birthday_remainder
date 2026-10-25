@@ -16,7 +16,8 @@ export type SendOutcome =
 /** Sends an approved template whose only variable, {{1}}, is the recipient's name */
 export async function sendTemplateMessage(message: TemplateMessage, timeoutMs: number): Promise<SendOutcome> {
   try {
-    const result = await graphRequest<{ messages?: { id: string }[] }>(`${metaEnv().META_PHONE_NUMBER_ID}/messages`, {
+    // null when the body couldn't be read: Meta answered 200, so treat it as unknown below
+    const result = await graphRequest<{ messages?: { id: string }[] } | null>(`${metaEnv().META_PHONE_NUMBER_ID}/messages`, {
       method: "POST",
       timeoutMs,
       body: {
@@ -32,7 +33,7 @@ export async function sendTemplateMessage(message: TemplateMessage, timeoutMs: n
         },
       },
     });
-    const waMessageId = result.messages?.[0]?.id;
+    const waMessageId = result?.messages?.[0]?.id;
     return waMessageId
       ? { ok: true, waMessageId }
       : { ok: false, definite: false, message: "Meta answered without a message id." };
