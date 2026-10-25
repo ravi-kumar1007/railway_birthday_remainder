@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { count } from "drizzle-orm";
 import { Suspense } from "react";
 import { getDb, schema } from "@/db";
+import { rethrowNextErrors } from "@/db/errors";
 import { getSession } from "@/lib/auth/session";
 import { appTimeZone, todayInTimeZone, toIsoDate } from "@/lib/dates";
+import { describeError } from "@/lib/log";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -29,7 +31,9 @@ async function SetupStatus() {
     const [row] = await getDb().select({ value: count() }).from(schema.employees);
     database = { ok: true, employees: row.value };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    rethrowNextErrors(error);
+    // Drizzle's own message is just the SQL; the driver's message says what went wrong
+    const message = describeError(error);
     database = {
       ok: false,
       message: /does not exist/.test(message)

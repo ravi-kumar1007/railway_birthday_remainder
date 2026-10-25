@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { logout } from "@/app/login/actions";
 
 const links = [
@@ -19,13 +19,13 @@ function isActive(pathname: string, href: string) {
 }
 
 export function AdminNav({ companyName }: { companyName: string }) {
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white lg:h-dvh lg:w-60 lg:shrink-0 lg:border-r lg:border-b-0">
       <div className="flex h-14 items-center justify-between px-4 lg:h-16 lg:px-5">
-        <Link href="/admin" className="flex min-w-0 items-center gap-2.5" onClick={() => setOpen(false)}>
+        <Link href="/admin" className="flex min-w-0 items-center gap-2.5" onClick={close}>
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-base text-white">
             <span aria-hidden>🎂</span>
           </span>
@@ -56,27 +56,11 @@ export function AdminNav({ companyName }: { companyName: string }) {
         id="admin-nav-links"
         className={`${open ? "block" : "hidden"} border-t border-slate-200 px-3 pb-4 lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col lg:border-t-0`}
       >
-        <ul className="space-y-0.5 pt-3 lg:flex-1">
-          {links.map((link) => {
-            const active = isActive(pathname, link.href);
-            return (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    active
-                      ? "bg-emerald-50 text-emerald-800"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        {/* The URL of a page like /admin/employees/[id] is only known per request, so the active
+            highlight streams in; the fallback is the same list without it */}
+        <Suspense fallback={<NavLinks pathname={null} onNavigate={close} />}>
+          <CurrentNavLinks onNavigate={close} />
+        </Suspense>
         <form action={logout} className="mt-3 border-t border-slate-200 pt-3">
           <button
             type="submit"
@@ -87,5 +71,35 @@ export function AdminNav({ companyName }: { companyName: string }) {
         </form>
       </nav>
     </header>
+  );
+}
+
+function CurrentNavLinks({ onNavigate }: { onNavigate: () => void }) {
+  return <NavLinks pathname={usePathname()} onNavigate={onNavigate} />;
+}
+
+function NavLinks({ pathname, onNavigate }: { pathname: string | null; onNavigate: () => void }) {
+  return (
+    <ul className="space-y-0.5 pt-3 lg:flex-1">
+      {links.map((link) => {
+        const active = pathname !== null && isActive(pathname, link.href);
+        return (
+          <li key={link.href}>
+            <Link
+              href={link.href}
+              onClick={onNavigate}
+              aria-current={active ? "page" : undefined}
+              className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                active
+                  ? "bg-emerald-50 text-emerald-800"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              {link.label}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

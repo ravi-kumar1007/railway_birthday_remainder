@@ -2,10 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
+import { inputClass } from "@/components/styles";
 import { login, type LoginState } from "./actions";
-
-const inputClass =
-  "mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20";
 
 export function LoginForm() {
   const next = useSearchParams().get("next") ?? "";
