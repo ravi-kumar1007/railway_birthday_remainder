@@ -4,18 +4,37 @@ import { metaEnv } from "@/lib/env";
 // Meta's Graph API over fetch: no SDK. The token goes in the Authorization header only, never in a
 // URL, so it can't end up in logs or error messages.
 
+/**
+ * What happened to the request: Meta answered with an error (rejected), it never left this server
+ * (not_sent), or there was no answer, so Meta may or may not have acted on it (unknown).
+ */
+export type MetaRequestOutcome = "rejected" | "not_sent" | "unknown";
+
 export class MetaApiError extends Error {
   name = "MetaApiError";
 
   constructor(
     message: string,
-    /** HTTP status, or 0 when Meta couldn't be reached */
+    /** HTTP status, or 0 when there was no answer */
     readonly status: number,
+    readonly outcome: MetaRequestOutcome,
     readonly code?: number,
     readonly subcode?: number,
   ) {
     super(message);
   }
+}
+
+// Failures that happen before a connection exists, so the request can't have reached Meta
+const NEVER_CONNECTED = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+
+function networkError(error: unknown): MetaApiError {
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return new MetaApiError("Meta didn't answer in time.", 0, "unknown");
+  }
+  const cause = error instanceof Error ? (error.cause as { code?: unknown } | undefined) : undefined;
+  const neverConnected = typeof cause?.code === "string" && NEVER_CONNECTED.has(cause.code);
+  return new MetaApiError("Couldn't reach Meta.", 0, neverConnected ? "not_sent" : "unknown");
 }
 
 type GraphErrorBody = {
@@ -31,7 +50,7 @@ function errorFrom(status: number, body: GraphErrorBody | null): MetaApiError {
     message = "The Meta access token doesn't have permission. It needs whatsapp_business_management and whatsapp_business_messaging.";
   } else if (code === 4 || code === 80008 || code === 613) message = "Meta's rate limit was reached. Wait a few minutes and try again.";
   else message = error?.error_user_msg || error?.message || `Meta answered with status ${status}.`;
-  return new MetaApiError(message, status, code, error?.error_subcode);
+  return new MetaApiError(message, status, "rejected", code, error?.error_subcode);
 }
 
 type GraphRequest = {
@@ -64,10 +83,7 @@ export async function graphRequest<T>(
       cache: "no-store",
     });
   } catch (error) {
-    throw new MetaApiError(
-      error instanceof Error && error.name === "TimeoutError" ? "Meta didn't answer in time. Try again." : "Couldn't reach Meta.",
-      0,
-    );
+    throw networkError(error);
   }
 
   const data: unknown = await response.json().catch(() => null);

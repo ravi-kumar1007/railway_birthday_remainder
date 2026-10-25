@@ -5,7 +5,9 @@ import { z } from "zod";
 // Error messages name the missing variables, never their values.
 
 function parseEnv<T extends z.ZodRawShape>(shape: T, group: string): z.infer<z.ZodObject<T>> {
-  const result = z.object(shape).safeParse(process.env);
+  // A blank line like "META_ACCESS_TOKEN=" in .env.local means not set
+  const values = Object.fromEntries(Object.keys(shape).map((key) => [key, process.env[key] || undefined]));
+  const result = z.object(shape).safeParse(values);
   if (!result.success) {
     const problems = result.error.issues
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
@@ -26,9 +28,9 @@ const dbShape = {
 const authShape = {
   ADMIN_EMAIL: z.email("must be an email address"),
   ADMIN_PASSWORD_HASH: z
-    .string()
+    .string("is not set (run npm run hash-password)")
     .regex(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, "must be a bcrypt hash (run npm run hash-password)"),
-  SESSION_SECRET: z.string().min(32, "must be at least 32 characters"),
+  SESSION_SECRET: z.string("is not set").min(32, "must be at least 32 characters"),
 };
 
 const metaShape = {
@@ -41,6 +43,17 @@ const metaShape = {
 let dbCache: z.infer<z.ZodObject<typeof dbShape>> | undefined;
 let authCache: z.infer<z.ZodObject<typeof authShape>> | undefined;
 let metaCache: z.infer<z.ZodObject<typeof metaShape>> | undefined;
+
+const cronShape = {
+  CRON_SECRET: z.string("is not set").min(16, "must be at least 16 random characters"),
+};
+
+let cronCache: z.infer<z.ZodObject<typeof cronShape>> | undefined;
+
+export function cronEnv() {
+  cronCache ??= parseEnv(cronShape, "cron");
+  return cronCache;
+}
 
 export function dbEnv() {
   dbCache ??= parseEnv(dbShape, "database");

@@ -107,3 +107,16 @@ describe("safeNextPath", () => {
     }
   });
 });
+
+describe("environment checks", () => {
+  it("reports a blank setting as not set, naming it but never showing values", async () => {
+    const { metaConfigProblem } = await import("@/lib/env");
+    const saved = { ...process.env };
+    Object.assign(process.env, { META_GRAPH_VERSION: "v26.0", META_ACCESS_TOKEN: "", META_WABA_ID: "123", META_PHONE_NUMBER_ID: "456" });
+    try {
+      expect(metaConfigProblem()).toBe("Invalid Meta WhatsApp environment variables: META_ACCESS_TOKEN: is not set");
+    } finally {
+      process.env = saved;
+    }
+  });
+});

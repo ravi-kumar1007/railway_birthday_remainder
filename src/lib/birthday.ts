@@ -20,11 +20,15 @@ export function isValidBirthday({ day, month, year }: Birthday): boolean {
   return day <= max;
 }
 
-/** Whether a birthday falls on `date`. 29 Feb birthdays are celebrated on 28 Feb in non-leap years. */
+/** The birthdays (day and month) celebrated on `date`: 29 Feb ones move to 28 Feb in non-leap years. */
+export function birthdayMonthDaysOn(date: CalendarDate): { month: number; day: number }[] {
+  const matches = [{ month: date.month, day: date.day }];
+  if (date.month === 2 && date.day === 28 && !isLeapYear(date.year)) matches.push({ month: 2, day: 29 });
+  return matches;
+}
+
 export function isBirthdayOn(birthday: Pick<Birthday, "day" | "month">, date: CalendarDate): boolean {
-  if (birthday.month !== date.month) return false;
-  if (birthday.day === date.day) return true;
-  return birthday.month === 2 && birthday.day === 29 && date.day === 28 && !isLeapYear(date.year);
+  return birthdayMonthDaysOn(date).some((match) => match.month === birthday.month && match.day === birthday.day);
 }
 
 /** Parses the YYYY-MM-DD value of an <input type="date">. */

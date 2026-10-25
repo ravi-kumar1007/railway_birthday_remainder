@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  birthdayMonthDaysOn,
   formatBirthday,
   isBirthdayOn,
   isValidBirthday,
@@ -78,5 +79,20 @@ describe("formatBirthday", () => {
   it("shows the year only when it is known", () => {
     expect(formatBirthday({ day: 15, month: 8, year: 1990 })).toBe("15 Aug 1990");
     expect(formatBirthday({ day: 29, month: 2, year: null })).toBe("29 Feb");
+  });
+});
+
+describe("birthdayMonthDaysOn (Feb 29)", () => {
+  it("is just today's day and month on ordinary days", () => {
+    expect(birthdayMonthDaysOn({ year: 2026, month: 8, day: 15 })).toEqual([{ month: 8, day: 15 }]);
+  });
+
+  it("adds 29 Feb on 28 Feb in non-leap years only", () => {
+    expect(birthdayMonthDaysOn({ year: 2026, month: 2, day: 28 })).toEqual([
+      { month: 2, day: 28 },
+      { month: 2, day: 29 },
+    ]);
+    expect(birthdayMonthDaysOn({ year: 2028, month: 2, day: 28 })).toEqual([{ month: 2, day: 28 }]);
+    expect(birthdayMonthDaysOn({ year: 2028, month: 2, day: 29 })).toEqual([{ month: 2, day: 29 }]);
   });
 });
