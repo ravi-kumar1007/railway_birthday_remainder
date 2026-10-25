@@ -34,6 +34,16 @@ function csvDate({ birthDay, birthMonth, birthYear }: CsvEmployee): string {
     : `${day}-${String(birthMonth).padStart(2, "0")}-${birthYear}`;
 }
 
+/** The downloadable example for the import page */
+export function sampleImportCsv(): string {
+  return toCsv([
+    EMPLOYEE_CSV_HEADERS.filter((header) => header !== "Active"),
+    ["E-101", "Priya Sharma", "9876543210", "15-08-1990", "Yes"],
+    ["E-102", "Rahul Verma", "+919123456789", "02-01-1988", "Yes"],
+    ["E-103", "Ananya Iyer", "08123456789", "29-02-1992", "No"],
+  ]);
+}
+
 export function employeesToCsv(employees: readonly CsvEmployee[]): string {
   return toCsv([
     EMPLOYEE_CSV_HEADERS,

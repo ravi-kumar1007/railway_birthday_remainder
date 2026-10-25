@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
+import { Badge } from "@/components/badge";
 import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/styles";
 import { rethrowNextErrors } from "@/db/errors";
 import { formatBirthday, isBirthdayOn } from "@/lib/birthday";
@@ -32,11 +34,7 @@ function noticeFor(value: string | string[] | undefined): string | undefined {
     : undefined;
 }
 
-export default async function EmployeesPage({ searchParams }: PageProps<"/admin/employees">) {
-  const params = await searchParams;
-  const filters = parseEmployeeFilters(params);
-  const notice = noticeFor(params.notice);
-
+export default function EmployeesPage({ searchParams }: PageProps<"/admin/employees">) {
   return (
     <>
       <PageHeader
@@ -53,14 +51,29 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/admin/
           </>
         }
       />
+      {/* The URL is read inside Suspense, so navigating here shows the header at once */}
+      <Suspense fallback={<Skeleton className="h-96" />}>
+        <EmployeeList searchParams={searchParams} />
+      </Suspense>
+    </>
+  );
+}
+
+async function EmployeeList({ searchParams }: Pick<PageProps<"/admin/employees">, "searchParams">) {
+  const params = await searchParams;
+  const filters = parseEmployeeFilters(params);
+  const notice = noticeFor(params.notice);
+
+  return (
+    <>
       {notice && (
         <p role="status" className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {notice}
         </p>
       )}
       {/* Keyed so the inputs pick up filters changed by a link, such as "Clear filters" */}
-      <EmployeeFilterBar key={employeeFiltersQuery({ ...filters, page: 1 })} filters={filters} />
-      <Suspense key={employeeFiltersQuery(filters)} fallback={<TableSkeleton />}>
+      <EmployeeFilterBar key={`filters${employeeFiltersQuery({ ...filters, page: 1 })}`} filters={filters} />
+      <Suspense key={`table${employeeFiltersQuery(filters)}`} fallback={<Skeleton className="h-96" />}>
         <EmployeeTable filters={filters} />
       </Suspense>
     </>
@@ -236,22 +249,6 @@ function PageLink({
   );
 }
 
-const badgeTones = {
-  emerald: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-  amber: "bg-amber-50 text-amber-800 ring-amber-600/20",
-  slate: "bg-slate-100 text-slate-600 ring-slate-500/20",
-};
-
-function Badge({ tone, children }: { tone: keyof typeof badgeTones; children: ReactNode }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset ${badgeTones[tone]}`}
-    >
-      {children}
-    </span>
-  );
-}
-
 function Message({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
@@ -259,8 +256,4 @@ function Message({ title, children }: { title: string; children: ReactNode }) {
       <div className="mt-1 text-sm text-slate-500">{children}</div>
     </div>
   );
-}
-
-function TableSkeleton() {
-  return <div className="h-96 animate-pulse rounded-2xl bg-slate-200/70" aria-hidden />;
 }

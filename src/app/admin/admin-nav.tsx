@@ -18,7 +18,11 @@ function isActive(pathname: string, href: string) {
   return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
 }
 
-export function AdminNav({ companyName }: { companyName: string }) {
+// Read here rather than passed from the server layout: NEXT_PUBLIC_ values are fixed at build time
+// in the browser, and the prerendered page must show the same name or hydration fails
+const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Company";
+
+export function AdminNav() {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { EMPLOYEE_CSV_HEADERS, employeesToCsv, toCsv } from "@/lib/employee-csv";
+import { EMPLOYEE_CSV_HEADERS, employeesToCsv, sampleImportCsv, toCsv } from "@/lib/employee-csv";
+import { detectColumns } from "@/lib/import/columns";
+import { buildPreview, sheetToTable } from "@/lib/import/preview";
+import Papa from "papaparse";
 
 describe("toCsv", () => {
   it("quotes fields containing commas, quotes or line breaks", () => {
@@ -46,5 +49,31 @@ describe("employeesToCsv", () => {
 
   it("uses headers the importer recognises", () => {
     expect(EMPLOYEE_CSV_HEADERS).toEqual(["Emp Code", "Name", "Phone", "Date of Birth", "WhatsApp Consent", "Active"]);
+  });
+});
+
+describe("round trips through the importer", () => {
+  function importCsv(csv: string) {
+    const table = sheetToTable(Papa.parse<string[]>(csv, { skipEmptyLines: "greedy" }).data);
+    return buildPreview(table, detectColumns(table.headers));
+  }
+
+  it("imports every row of the sample file", () => {
+    expect(importCsv(sampleImportCsv()).map((row) => row.status)).toEqual(["valid", "valid", "valid"]);
+  });
+
+  it("re-imports an export unchanged, including unknown years and formula-like names", () => {
+    const csv = employeesToCsv([
+      { empCode: "E-1", name: "=Not a formula", phone: "+919876543210", birthDay: 29, birthMonth: 2, birthYear: null, whatsappConsent: true, isActive: true },
+    ]);
+    expect(importCsv(csv)[0].data).toEqual({
+      empCode: "E-1",
+      name: "=Not a formula",
+      phone: "+919876543210",
+      birthDay: 29,
+      birthMonth: 2,
+      birthYear: null,
+      whatsappConsent: true,
+    });
   });
 });

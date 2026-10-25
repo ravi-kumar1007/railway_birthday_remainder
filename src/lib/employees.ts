@@ -1,8 +1,9 @@
 import "server-only";
-import { and, asc, count, eq, ilike, like, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import type { EmployeeFilters } from "./employee-filters";
+import type { ImportPlan, SavedEmployee } from "./import/plan";
 
 const { employees } = schema;
 
@@ -72,4 +73,38 @@ export async function findEmployeeWith(field: "phone" | "empCode", value: string
     .where(eq(column, value))
     .limit(1);
   return row ?? null;
+}
+
+/** Saved employees, active or not, holding any of these phone numbers or employee codes */
+export async function findEmployeesByPhoneOrCode(phones: string[], codes: string[]): Promise<SavedEmployee[]> {
+  if (phones.length === 0 && codes.length === 0) return [];
+  return getDb()
+    .select({
+      id: employees.id,
+      name: employees.name,
+      phone: employees.phone,
+      empCode: employees.empCode,
+      birthDay: employees.birthDay,
+      birthMonth: employees.birthMonth,
+      birthYear: employees.birthYear,
+      whatsappConsent: employees.whatsappConsent,
+    })
+    .from(employees)
+    .where(
+      or(
+        phones.length > 0 ? inArray(employees.phone, phones) : undefined,
+        codes.length > 0 ? inArray(employees.empCode, codes) : undefined,
+      ),
+    );
+}
+
+/** Saves an import plan all-or-nothing: neon-http runs a batch as one transaction. */
+export async function applyImportPlan(plan: ImportPlan): Promise<void> {
+  const db = getDb();
+  const statements = [
+    ...plan.updates.map(({ id, set }) => db.update(employees).set(set).where(eq(employees.id, id))),
+    ...(plan.inserts.length > 0 ? [db.insert(employees).values(plan.inserts)] : []),
+  ];
+  const [first, ...rest] = statements;
+  if (first) await db.batch([first, ...rest]);
 }

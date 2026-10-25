@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
 import { dangerButtonClass, secondaryButtonClass } from "@/components/styles";
 import { SubmitButton } from "@/components/submit-button";
 import { toDateInputValue } from "@/lib/birthday";
@@ -12,8 +14,17 @@ import { EmployeeForm } from "../employee-form";
 
 export const metadata: Metadata = { title: "Edit employee" };
 
-export default async function EditEmployeePage({ params }: PageProps<"/admin/employees/[id]">) {
+export default function EditEmployeePage({ params }: PageProps<"/admin/employees/[id]">) {
+  return (
+    <Suspense fallback={<Skeleton className="h-[36rem] max-w-2xl" />}>
+      <EditEmployee params={params} />
+    </Suspense>
+  );
+}
+
+async function EditEmployee({ params }: Pick<PageProps<"/admin/employees/[id]">, "params">) {
   const { id } = await params;
+  // Today's date (the latest allowed birthday) must be read per request
   await connection();
   const employee = await getEmployee(id);
   if (!employee) notFound();

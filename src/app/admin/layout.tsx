@@ -5,7 +5,7 @@ import { AdminNav } from "./admin-nav";
 export default function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="min-h-dvh lg:flex">
-      <AdminNav companyName={process.env.NEXT_PUBLIC_COMPANY_NAME || "Company"} />
+      <AdminNav />
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
         <div className="mx-auto max-w-6xl">
           <Suspense fallback={<PageSkeleton />}>

@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { ComingSoon, PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/page-header";
+import { Importer } from "./importer";
 
 export const metadata: Metadata = { title: "Import" };
 
 export default function ImportPage() {
   return (
     <>
-      <PageHeader title="Import" description="Bring employees in from Excel, CSV or PDF." />
-      <ComingSoon phase={3}>Upload .xlsx, .xls, .csv or text-based .pdf files, map columns and preview rows before importing.</ComingSoon>
+      <PageHeader
+        title="Import employees"
+        description="Add or update employees from Excel, CSV or PDF. The file is read in your browser, and only the rows you import are sent."
+      />
+      <Importer />
     </>
   );
 }
