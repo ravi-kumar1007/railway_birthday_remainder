@@ -147,8 +147,8 @@ The token from the Try it out page expires after 24 hours. For production, use a
 
 1. Push the repository to GitHub.
 2. Netlify → **Add new site → Import an existing project** → choose the repository. `netlify.toml` sets the
-   build command (`npm run build`), the publish directory (`.next`) and Node 22; Netlify adds its Next.js
-   adapter automatically.
+   build command (`npm run build`), the publish directory (`.next`), Node 22 and the Next.js adapter
+   (`@netlify/plugin-nextjs`).
 3. **Site configuration → Environment variables**: add every variable from the table above with your
    production values. For `ADMIN_PASSWORD_HASH`, paste the plain hash (no backslashes).
 4. Run the migrations against the production database from your machine:
